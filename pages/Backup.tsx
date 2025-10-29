@@ -1,20 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { toast } from 'react-toastify';
 import {
-  restoreBackup,
   companiesApi,
   clientsApi,
   employeesApi,
   funcsApi,
   dailyRatesApi,
-  usersApi
+  usersApi,
+  paymentBatchesApi
 } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
 import { FaDownload, FaUpload } from 'react-icons/fa';
+import axios from 'axios';
 
 const Backup: React.FC = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [backupFileContent, setBackupFileContent] = useState<string | null>(null);
+  const [backupFileContent, setBackupFileContent] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleBackup = async () => {
@@ -27,14 +28,16 @@ const Backup: React.FC = () => {
         employees,
         funcs,
         dailyRates,
-        users
+        users,
+        paymentBatches
       ] = await Promise.all([
         companiesApi.getAll(),
         clientsApi.getAll(),
         employeesApi.getAll(),
         funcsApi.getAll(),
         dailyRatesApi.getAll(),
-        usersApi.getAll()
+        usersApi.getAll(),
+        paymentBatchesApi.getAll()
       ]);
 
       const backupData = {
@@ -44,6 +47,7 @@ const Backup: React.FC = () => {
         funcs,
         dailyRates,
         users,
+        paymentBatches,
         backupDate: new Date().toISOString()
       };
 
@@ -73,39 +77,43 @@ const Backup: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const content = e.target?.result as string;
-        setBackupFileContent(content);
-        setIsConfirmModalOpen(true);
+        try {
+            const content = e.target?.result as string;
+            const parsedContent = JSON.parse(content);
+             // Basic validation
+            if (parsedContent && parsedContent.companies && parsedContent.clients && parsedContent.employees) {
+                setBackupFileContent(parsedContent);
+                setIsConfirmModalOpen(true);
+            } else {
+                 throw new Error("Formato de arquivo de backup inválido.");
+            }
+        } catch(err) {
+            toast.error('O arquivo de backup é inválido ou está corrompido.');
+            setBackupFileContent(null);
+        }
       };
       reader.onerror = () => {
         toast.error('Erro ao ler o arquivo.');
       };
       reader.readAsText(file);
     }
-    // Reset file input to allow selecting the same file again
     if(fileInputRef.current) {
         fileInputRef.current.value = "";
     }
   };
 
-  const confirmRestore = () => {
+  const confirmRestore = async () => {
     if (!backupFileContent) return;
 
     try {
-      const data = JSON.parse(backupFileContent);
-      // Basic validation
-      if (data && data.companies && data.clients && data.employees) {
-        restoreBackup(data);
-        toast.success('Restauração concluída com sucesso! A aplicação será recarregada.');
+        await axios.post('/api/backup/restore', backupFileContent, { withCredentials: true });
+        toast.success('Restauração enviada com sucesso! O servidor está processando. A aplicação será recarregada.');
         setTimeout(() => {
           window.location.reload();
-        }, 2000);
-      } else {
-        throw new Error("Formato de arquivo de backup inválido.");
-      }
+        }, 3000);
     } catch (error) {
       console.error("Erro ao restaurar backup:", error);
-      toast.error('O arquivo de backup é inválido ou está corrompido.');
+      toast.error('Ocorreu um erro ao enviar o backup para o servidor.');
     } finally {
         setIsConfirmModalOpen(false);
         setBackupFileContent(null);
@@ -137,7 +145,7 @@ const Backup: React.FC = () => {
       <div className="bg-white p-6 shadow-md rounded-lg border-l-4 border-red-500">
         <h2 className="text-xl font-bold text-gray-700 mb-4">Importar Dados</h2>
         <p className="text-gray-600 mb-4">
-          Para restaurar os dados de um arquivo de backup, clique no botão abaixo. <strong className="text-red-700">Atenção:</strong> esta ação substituirá permanentemente todos os dados atuais do sistema.
+          Para restaurar os dados de um arquivo de backup, clique no botão abaixo. <strong className="text-red-700">Atenção:</strong> esta ação substituirá permanentemente todos os dados atuais no servidor.
         </p>
         <input
             type="file"
@@ -161,7 +169,7 @@ const Backup: React.FC = () => {
         onConfirm={confirmRestore}
         title="Confirmar Restauração"
       >
-        Você tem certeza que deseja restaurar os dados deste backup? <strong className="text-red-700">Todos os dados atuais serão substituídos permanentemente.</strong> Esta ação não pode ser desfeita.
+        Você tem certeza que deseja restaurar os dados deste backup? <strong className="text-red-700">Todos os dados atuais no servidor serão substituídos permanentemente.</strong> Esta ação não pode ser desfeita.
       </ConfirmModal>
     </div>
   );
