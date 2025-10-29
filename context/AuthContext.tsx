@@ -1,34 +1,58 @@
-
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User } from '../types';
+import axios from 'axios';
+import { toast } from 'react-toastify';
 
 interface AuthContextType {
   user: User | null;
-  login: (user: User) => void;
+  isLoading: boolean;
+  login: (credentials: {email: string, password: string}) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const storedUser = localStorage.getItem('user');
-    return storedUser ? JSON.parse(storedUser) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = (userData: User) => {
-    localStorage.setItem('user', JSON.stringify(userData));
-    setUser(userData);
+  useEffect(() => {
+    const checkLoggedIn = async () => {
+      try {
+        const response = await axios.get('/api/auth/me');
+        setUser(response.data);
+      } catch (error) {
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkLoggedIn();
+  }, []);
+
+  const login = async (credentials: {email: string, password: string}) => {
+    try {
+      const response = await axios.post('/api/auth/login', credentials);
+      setUser(response.data);
+      toast.success('Login bem-sucedido!');
+    } catch (error) {
+      toast.error('Credenciais inválidas.');
+      throw error;
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem('user');
-    setUser(null);
+  const logout = async () => {
+    try {
+      await axios.post('/api/auth/logout');
+      setUser(null);
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 };
