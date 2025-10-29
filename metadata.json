@@ -1,0 +1,5 @@
+{
+  "name": "gestao-v8",
+  "description": "A comprehensive web application for managing outsourced services, including companies, clients, employees, and daily work logs.",
+  "requestFramePermissions": []
+}
